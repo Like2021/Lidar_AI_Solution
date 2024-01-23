@@ -22,6 +22,7 @@
 
 # export CUDA_VISIBLE_DEVICES=2
 
+<<<<<<< HEAD
 export TensorRT_Lib=/usr/lib/x86_64-linux-gnu/lib
 export TensorRT_Inc=/home/shawn/develop/workspace/bev_fusion/TensorRT-8.4.1.5/include
 export TensorRT_Bin=/usr/src/tensorrt/bin
@@ -30,6 +31,16 @@ export CUDA_Lib=/usr/local/cuda-11.4/lib64
 export CUDA_Inc=/usr/local/cuda-11.4/include
 export CUDA_Bin=/usr/local/cuda-11.4/bin
 export CUDA_HOME=/usr/local/cuda-11.4
+=======
+export TensorRT_Lib=/path/to/TensorRT/lib
+export TensorRT_Inc=/path/to/TensorRT/include
+export TensorRT_Bin=/usr/src/tensorrt/bin
+
+export CUDA_Lib=/usr/local/cuda/lib64
+export CUDA_Inc=/usr/local/cuda/include
+export CUDA_Bin=/usr/local/cuda/bin
+export CUDA_HOME=/usr/local/cuda
+>>>>>>> a8461f0a024477dbcf8746a3ea8a0f5e3aa14540
 
 export CUDNN_Lib=/usr/lib/x86_64-linux-gnu
 

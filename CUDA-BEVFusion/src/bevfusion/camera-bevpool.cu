@@ -94,10 +94,10 @@ class BEVPoolImplement : public BEVPool {
                                 const unsigned int* indices, const nvtype::Int3* intervals, unsigned int num_intervals,
                                 void* stream = nullptr) override {
     unsigned int C, D, H, W;
-    C = camera_shape_[1];
-    D = camera_shape_[2];
-    H = camera_shape_[3];
-    W = camera_shape_[4];
+    C = camera_shape_[1];  // 80
+    D = camera_shape_[2];  // 118
+    H = camera_shape_[3];  // 32
+    W = camera_shape_[4];  // 88
 
     cudaStream_t _stream = static_cast<cudaStream_t>(stream);
 

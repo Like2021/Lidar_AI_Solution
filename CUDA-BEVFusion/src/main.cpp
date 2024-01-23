@@ -23,7 +23,7 @@
 
 #include <cuda_runtime.h>
 #include <string.h>
-
+#include <iostream>
 #include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -66,6 +66,15 @@ static void visualize(const std::vector<bevfusion::head::transbbox::BoundingBox>
   std::vector<nv::Prediction> predictions(bboxes.size());
   memcpy(predictions.data(), bboxes.data(), bboxes.size() * sizeof(nv::Prediction));
 
+  // printf("[DATE: %s] LINE: %d [%s] INFO %ld\n",__DATE__, __LINE__, __func__, predictions.size());
+  // for (size_t i = 0; i < predictions.size(); ++i) {
+  //   printf("[DATE: %s] LINE: %d [%s] INFO %d\n",__DATE__, __LINE__, __func__, predictions[i].id);
+  //   if (predictions[i].id != 1) continue;
+  //   printf("[DATE: %s] LINE: %d [%s] INFO position.x is: %f\n",__DATE__, __LINE__, __func__, predictions[i].position.x);
+  //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, predictions[i].position.y);
+  //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, predictions[i].position.z);
+  // }
+
   int padding = 300;
   int lidar_size = 1024;
   int content_width = lidar_size + padding * 3;
@@ -84,10 +93,12 @@ static void visualize(const std::vector<bevfusion::head::transbbox::BoundingBox>
   nv::BEVArtistParameter bev_artist_param;
   bev_artist_param.image_width = content_width;
   bev_artist_param.image_height = content_height;
-  bev_artist_param.rotate_x = 70.0f;
+  bev_artist_param.rotate_x = 0.0f;
   bev_artist_param.norm_size = lidar_size * 0.5f;
   bev_artist_param.cx = content_width * 0.5f;
   bev_artist_param.cy = content_height * 0.5f;
+  // bev_artist_param.cx = 200;
+  // bev_artist_param.cy = 200;
   bev_artist_param.image_stride = scene_artist_param.stride;
 
   auto points = lidar_points.to_device();
@@ -102,13 +113,14 @@ static void visualize(const std::vector<bevfusion::head::transbbox::BoundingBox>
   image_artist_param.image_width = 1600;
   image_artist_param.image_height = 900;
   image_artist_param.image_stride = image_artist_param.image_width * 3;
-  image_artist_param.viewport_nx4x4.resize(images.size() * 4 * 4);
+  image_artist_param.viewport_nx4x4.resize(images.size() * 4 * 4);            // lidar2image
   memcpy(image_artist_param.viewport_nx4x4.data(), lidar2image.ptr<float>(),
          sizeof(float) * image_artist_param.viewport_nx4x4.size());
 
   int gap = 0;
   int camera_width = 500;
-  int camera_height = static_cast<float>(camera_width / (float)image_artist_param.image_width * image_artist_param.image_height);
+  int camera_height = static_cast<float>(camera_width / (float)image_artist_param.image_width * image_artist_param.image_height);  // 281
+  // printf("camera_height: %d\n", camera_height);
   int offset_cameras[][3] = {
       {-camera_width / 2, -content_height / 2 + gap, 0},
       {content_width / 2 - camera_width - gap, -content_height / 2 + camera_height / 2, 0},
@@ -117,11 +129,17 @@ static void visualize(const std::vector<bevfusion::head::transbbox::BoundingBox>
       {-content_width / 2 + gap, +content_height / 2 - camera_height - camera_height / 2, 0},
       {content_width / 2 - camera_width - gap, +content_height / 2 - camera_height - camera_height / 2, 1}};
 
+  // for (int i = 0; i < 6; ++i) printf("%d\n", offset_cameras[i][0]);
+  // printf("\n");
+
+  // 创建image可视化对象
   auto visualizer = nv::create_image_artist(image_artist_param);
   for (size_t icamera = 0; icamera < images.size(); ++icamera) {
     int ox = offset_cameras[icamera][0] + content_width / 2;
     int oy = offset_cameras[icamera][1] + content_height / 2;
     bool xflip = static_cast<bool>(offset_cameras[icamera][2]);
+    // printf("%d\n", ox);
+    // printf("%d\n", oy);
     visualizer->draw_prediction(icamera, predictions, xflip);
 
     nv::Tensor device_image(std::vector<int>{900, 1600, 3}, nv::DataType::UInt8);
@@ -202,7 +220,7 @@ std::shared_ptr<bevfusion::Core> create_core(const std::string& model, const std
   transbbox.post_center_range_end = {61.2, 61.2, 10.0};
   transbbox.voxel_size = {0.075, 0.075};
   transbbox.model = nv::format("model/%s/build/head.bbox.plan", model.c_str());
-  transbbox.confidence_threshold = 0.12f;
+  transbbox.confidence_threshold = 0.12f;                                                        // 置信度
   transbbox.sorted_bboxes = true;
 
   bevfusion::CoreParameter param;
@@ -243,6 +261,9 @@ int main(int argc, char** argv) {
   auto camera_intrinsics = nv::Tensor::load(nv::format("%s/camera_intrinsics.tensor", data), false);
   auto lidar2image = nv::Tensor::load(nv::format("%s/lidar2image.tensor", data), false);
   auto img_aug_matrix = nv::Tensor::load(nv::format("%s/img_aug_matrix.tensor", data), false);
+  // auto shape = img_aug_matrix.shape;
+  // printf("[DATE: %s] LINE: %d [%s] INFO %ld\n",__DATE__, __LINE__, __func__, shape.size());
+  // for (int i = 0; i < shape.size(); ++i) printf("[DATE: %s] LINE: %d [%s] INFO %ld\n",__DATE__, __LINE__, __func__, shape[i]);
   core->update(camera2lidar.ptr<float>(), camera_intrinsics.ptr<float>(), lidar2image.ptr<float>(), img_aug_matrix.ptr<float>(),
               stream);
   // core->free_excess_memory();

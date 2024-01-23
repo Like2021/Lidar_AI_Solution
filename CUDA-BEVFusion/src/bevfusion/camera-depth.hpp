@@ -36,12 +36,15 @@ class Depth {
   // points must be of half-float type
   // return value will is a num_camera x image_height x image_width Tensor
   virtual nvtype::half* forward(const nvtype::half* points, int num_points, int points_dim, void* stream = nullptr) = 0;
+  // virtual float* forward_f(const nvtype::half* points, int num_points, int points_dim, void* stream = nullptr, int def = 1) = 0;
 
   // You can call this function if you need to update the matrix
   // All matrix pointers must be on the host
   // img_aug_matrix is num_camera x 4 x 4 matrix on host
   // lidar2image    is num_camera x 4 x 4 matrix on host
   virtual void update(const float* img_aug_matrix, const float* lidar2image, void* stream = nullptr) = 0;
+
+  // virtual unsigned int* depthCount() = 0;
 };
 
 std::shared_ptr<Depth> create_depth(unsigned int image_width, unsigned int image_height, unsigned int num_camera);

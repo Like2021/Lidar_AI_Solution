@@ -90,7 +90,7 @@ function compile_trt_model(){
     for i in $(seq 1 $number_of_output); do
         output_flags+=fp16:chw,
     done
-
+    # 111
     cmd="--onnx=$base/$name.onnx ${precision_flags} ${input_flags} ${output_flags} \
         --saveEngine=${result_save_directory}/$name.plan \
         --memPoolSize=workspace:2048 --verbose --dumpLayerInfo \

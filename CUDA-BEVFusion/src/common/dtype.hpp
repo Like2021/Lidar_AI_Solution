@@ -64,6 +64,7 @@ struct Float4 {
 // It is only used to specify the type only, while hoping to avoid header file contamination.
 typedef struct {
   unsigned short __x;
+  // float __x;
 } half;
 
 };  // namespace nvtype

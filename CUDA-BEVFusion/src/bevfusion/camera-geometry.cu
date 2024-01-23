@@ -118,6 +118,7 @@ static __global__ void create_frustum_kernel(unsigned int feat_width, unsigned i
   frustum[offset] = make_float3(ix * w_interval, iy * h_interval, dbound.x + id * dbound.z);
 }
 
+// 计算geometry，并且生成对应的rank和geometry坐标
 static __global__ void compute_geometry_kernel(unsigned int numel_frustum, const float3* frustum, const float4* camera2lidar,
                                                const float4* camera_intrins_inv, const float4* img_aug_matrix_inv,
                                                nvtype::Float3 bx, nvtype::Float3 dx, nvtype::Int3 nx, unsigned int* keep_count,
@@ -129,14 +130,19 @@ static __global__ void compute_geometry_kernel(unsigned int numel_frustum, const
   float3 point = frustum[tid];
   // float3 point     = make_float3(point_half.x, point_half.y, point_half.z);
   for (int icamerea = 0; icamerea < num_camera; ++icamerea) {
+    // 做了数据增强，所以这里要映射到处理后的图像上
     float3 projed = inverse_project(img_aug_matrix_inv, point);
+    // 对x,y均乘于深度
+    // (x, y, z) -> (x*z, y*z, z)
     projed.x *= projed.z;
     projed.y *= projed.z;
+    // 内参
     projed = make_float3(dot(camera_intrins_inv[4 * icamerea + 0], projed), dot(camera_intrins_inv[4 * icamerea + 1], projed),
                          dot(camera_intrins_inv[4 * icamerea + 2], projed));
+    // 外参
     projed = make_float3(project(camera2lidar[4 * icamerea + 0], projed), project(camera2lidar[4 * icamerea + 1], projed),
                          project(camera2lidar[4 * icamerea + 2], projed));
-
+    // 得到3D坐标 projed后将x,y从[-50,50]的范围平移到[0,100],计算栅格坐标并取整
     int _pid = icamerea * numel_frustum + tid;
     int3 coords;
     coords.x = int((projed.x - (bx.x - dx.x / 2.0)) / dx.x);
@@ -144,7 +150,10 @@ static __global__ void compute_geometry_kernel(unsigned int numel_frustum, const
     coords.z = int((projed.z - (bx.z - dx.z / 2.0)) / dx.z);
     geometry_out[_pid] = (coords.z * geometry_dim.z * geometry_dim.y + coords.x) * geometry_dim.x + coords.y;
 
+    // 过滤不在范围内的点
     bool kept = coords.x >= 0 && coords.y >= 0 && coords.z >= 0 && coords.x < nx.x && coords.y < nx.y && coords.z < nx.z;
+    // 1. 不在范围内的点赋值为0
+    // 2. 在范围内的点计算一个单独的rank值
     if (!kept) {
       ranks[_pid] = 0;
     } else {
@@ -175,18 +184,20 @@ class GeometryImplement : public Geometry {
 
   bool init(GeometryParameter param) {
     static_cast<GeometryParameter&>(param_) = param;
-    param_.D = (unsigned int)std::round((param_.dbound.y - param_.dbound.x) / param_.dbound.z);
+    param_.D = (unsigned int)std::round((param_.dbound.y - param_.dbound.x) / param_.dbound.z);                      // 118
     param_.bx = nvtype::Float3(param_.xbound.x + param_.xbound.z / 2.0f, param_.ybound.x + param_.ybound.z / 2.0f,
-                               param_.zbound.x + param_.zbound.z / 2.0f);
+                               param_.zbound.x + param_.zbound.z / 2.0f);                                            // (-53.849998, -53.849998, 0.000000)
 
-    param_.dx = nvtype::Float3(param_.xbound.z, param_.ybound.z, param_.zbound.z);
+    param_.dx = nvtype::Float3(param_.xbound.z, param_.ybound.z, param_.zbound.z);                                   // (0.300000, 0.300000, 20.000000)
     param_.nx = nvtype::Int3(static_cast<int>(std::round((param_.xbound.y - param_.xbound.x) / param_.xbound.z)),
                              static_cast<int>(std::round((param_.ybound.y - param_.ybound.x) / param_.ybound.z)),
-                             static_cast<int>(std::round((param_.zbound.y - param_.zbound.x) / param_.zbound.z)));
+                             static_cast<int>(std::round((param_.zbound.y - param_.zbound.x) / param_.zbound.z)));   // (1, 360, 360)
 
     cudaStream_t stream = nullptr;
-    float w_interval = (param_.image_width - 1.0f) / (param_.feat_width - 1.0f);
-    float h_interval = (param_.image_height - 1.0f) / (param_.feat_height - 1.0f);
+    // 下采样倍数  704 -> 88
+    float w_interval = (param_.image_width - 1.0f) / (param_.feat_width - 1.0f);    // 8.080460
+    float h_interval = (param_.image_height - 1.0f) / (param_.feat_height - 1.0f);  // 8.225806
+
     numel_frustum_ = param_.feat_width * param_.feat_height * param_.D;
     numel_geometry_ = numel_frustum_ * param_.num_camera;
 
@@ -239,10 +250,12 @@ class GeometryImplement : public Geometry {
                        reinterpret_cast<const float4*>(img_aug_matrix_inverse_), param_.bx, param_.dx, param_.nx, keep_count_,
                        ranks_, param_.geometry_dim, param_.num_camera, geometry_);
     checkRuntime(cudaMemcpyAsync(counter_host_, keep_count_, sizeof(unsigned int), cudaMemcpyDeviceToHost, _stream));
+    // 初始化indices,个数为geometry中点的个数
     cuda_linear_launch(arange_kernel, _stream, numel_geometry_, indices_);
+    // 给rank排序
     thrust::stable_sort_by_key(thrust::cuda::par.on(_stream), ranks_, ranks_ + numel_geometry_, indices_, thrust::less<int>());
     checkRuntime(cudaStreamSynchronize(_stream));
-
+    // geometry中点的个数 - 有效rank的个数
     unsigned int remain_ranks = numel_geometry_ - *counter_host_;
     unsigned int threads = *counter_host_ - 1;
     checkRuntime(cudaMemsetAsync(interval_starts_size_, 0, sizeof(int32_t), _stream));

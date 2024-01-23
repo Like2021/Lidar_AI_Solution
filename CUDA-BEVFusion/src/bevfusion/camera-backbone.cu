@@ -65,9 +65,9 @@ class BackboneImplement : public Backbone {
 
   virtual nvtype::half* depth() override { return depth_weights_; }
   virtual nvtype::half* feature() override { return feature_; }
-  virtual std::vector<int> depth_shape() override { return depth_dims_; }
-  virtual std::vector<int> feature_shape() override { return feature_dims_; }
-  virtual std::vector<int> camera_shape() override { return camera_shape_; }
+  virtual std::vector<int> depth_shape() override { return depth_dims_; }        // 6, 118, 32, 80     --> N D H W
+  virtual std::vector<int> feature_shape() override { return feature_dims_; }    // 6, 32, 88, 80      --> N H W C
+  virtual std::vector<int> camera_shape() override { return camera_shape_; }     // 6, 80, 118, 32, 88 --> N C D H W
 
  private:
   std::shared_ptr<TensorRT::Engine> engine_;

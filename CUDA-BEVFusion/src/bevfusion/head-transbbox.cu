@@ -47,10 +47,10 @@ static __global__ void decode_kernel(unsigned int num, const half* reg, const ha
                                      unsigned int max_output_size) {
   int ibox = cuda_linear_index;
   if (ibox >= num) return;
-
+  // 先取第一项
   int label = 0;
   float confidence = score[0 * num + ibox];
-
+  // 然后再遍历其他类别的置信度，取最大值更新
   for (int i = 1; i < num_class; ++i) {
     float local_score = score[i * num + ibox];
     if (local_score > confidence) {
@@ -58,7 +58,7 @@ static __global__ void decode_kernel(unsigned int num, const half* reg, const ha
       confidence = local_score;
     }
   }
-
+  // 过滤
   if (confidence < confidence_threshold) return;
 
   auto xs = __half2float(reg[0 * num + ibox]);
@@ -137,6 +137,7 @@ class TransBBoxImplement : public TransBBox {
       checkRuntime(cudaMalloc(&pdata, volumn * sizeof(half)));
 
       bindshape_.push_back(shape);
+      // for (auto &dim : shape) printf("[DATE: %s] LINE: %d [%s] INFO %d\n",__DATE__, __LINE__, __func__, dim);
       bindings_.push_back(pdata);
     }
     Assertf(bindings_.size() == 6, "Invalid output num of bindings[%d]", static_cast<int>(bindings_.size()));
@@ -155,6 +156,8 @@ class TransBBoxImplement : public TransBBox {
     cuda_linear_launch(decode_kernel, _stream, bindshape_[0][2], bindings_[0], bindings_[1], bindings_[2], bindings_[3],
                        bindings_[4], bindings_[5], bindshape_[5][1], param_, confidence_threshold, output_device_boxes_,
                        output_device_size_, MAX_DETECTION_BOX_SIZE);
+    // printf("[DATE: %s] LINE: %d [%s] INFO %d\n",__DATE__, __LINE__, __func__, bindshape_[0][2]);
+    // printf("[DATE: %s] LINE: %d [%s] INFO %d\n",__DATE__, __LINE__, __func__, bindshape_[5][1]);
 
     // int num_outbox = min(MAX_DETECTION_BOX_SIZE, )
     checkRuntime(cudaMemcpyAsync(output_host_boxes_, output_device_boxes_, MAX_DETECTION_BOX_SIZE * sizeof(BoundingBox),

@@ -22,23 +22,23 @@
 
 # export CUDA_VISIBLE_DEVICES=2
 
-export TensorRT_Lib=/path/to/TensorRT/lib
-export TensorRT_Inc=/path/to/TensorRT/include
-export TensorRT_Bin=/path/to/TensorRT/bin
+export TensorRT_Lib=/usr/lib/x86_64-linux-gnu/lib
+export TensorRT_Inc=/home/shawn/develop/workspace/bev_fusion/TensorRT-8.4.1.5/include
+export TensorRT_Bin=/usr/src/tensorrt/bin
 
-export CUDA_Lib=/path/to/cuda/lib64
-export CUDA_Inc=/path/to/cuda/include
-export CUDA_Bin=/path/to/cuda/bin
-export CUDA_HOME=/path/to/cuda
+export CUDA_Lib=/usr/local/cuda-11.4/lib64
+export CUDA_Inc=/usr/local/cuda-11.4/include
+export CUDA_Bin=/usr/local/cuda-11.4/bin
+export CUDA_HOME=/usr/local/cuda-11.4
 
-export CUDNN_Lib=/path/to/cudnn/lib
+export CUDNN_Lib=/usr/lib/x86_64-linux-gnu
 
 
 # resnet50/resnet50int8/swint
-export DEBUG_MODEL=resnet50int8
+export DEBUG_MODEL=resnet50
 
 # fp16/int8
-export DEBUG_PRECISION=int8
+export DEBUG_PRECISION=fp16
 export DEBUG_DATA=example-data
 export USE_Python=OFF
 

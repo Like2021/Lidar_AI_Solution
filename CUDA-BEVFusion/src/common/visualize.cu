@@ -43,7 +43,7 @@ namespace nv {
 #define CAST_BITS (INTER_RESIZE_COEF_BITS << 1)
 
 typedef std::tuple<std::vector<nvtype::Float2>, int, float, float> Box3DInfo;
-std::vector<Box3DInfo> transformation_predictions(const nvtype::Float4* viewport_4x4,
+std::vector<Box3DInfo> transformation_predictions(const nvtype::Float4* viewport_4x4,             // lidar2image
                                                   const std::vector<Prediction>& predictions) {
   if (predictions.empty()) return {};
 
@@ -54,7 +54,7 @@ std::vector<Box3DInfo> transformation_predictions(const nvtype::Float4* viewport
   // 8 x 3
   const nvtype::Float3 offset_of_corners[number_of_corner] = {{-1, -1, -1}, {+1, -1, -1}, {+1, +1, -1}, {-1, +1, -1},
                                                               {-1, -1, +1}, {+1, -1, +1}, {+1, +1, +1}, {-1, +1, +1}};
-
+  int count = 0;
   for (size_t idx_predict = 0; idx_predict < predictions.size(); ++idx_predict) {
     auto& item = predictions[idx_predict];
     float cos_rotation = cos(item.z_rotation);
@@ -85,6 +85,7 @@ std::vector<Box3DInfo> transformation_predictions(const nvtype::Float4* viewport
       float weight = corner.x * row2.x + corner.y * row2.y + corner.z * row2.z + row2.w;
 
       if (image_x <= 0 || image_y <= 0 || weight <= 0) {
+        count++;
         break;
       }
 
@@ -96,10 +97,35 @@ std::vector<Box3DInfo> transformation_predictions(const nvtype::Float4* viewport
 
     output.emplace_back(box3d, item.id, item.score, zdepth);
   }
-
+  printf("[DATE: %s] LINE: %d [%s] INFO %d\n",__DATE__, __LINE__, __func__, count);
   std::sort(output.begin(), output.end(), [](const Box3DInfo& a, const Box3DInfo& b) { return std::get<3>(a) > std::get<3>(b); });
   return output;
 }
+
+// void process_point(int x0, int y0, int x1, int y1, int thickness) {
+//   float length = std::sqrt((float)((y1-y0) * (y1-y0) + (x1-x0) * (x1-x0)));
+//   float angle  = std::atan2((float)y1-y0, (float)x1-x0);
+//   float cos_angle = std::cos(angle);
+//   float sin_angle = std::sin(angle);
+//   float half_thickness = thickness / 2.0f;
+
+//   // point4 cmd;
+//   float ax1 = -half_thickness * cos_angle + x0 - sin_angle * half_thickness;
+//   float ay1 = -half_thickness * sin_angle + cos_angle * half_thickness + y0;
+//   float bx1 = (length + half_thickness) * cos_angle - sin_angle * half_thickness + x0;
+//   float by1 = (length + half_thickness) * sin_angle + cos_angle * half_thickness + y0;
+//   float dx1 = -half_thickness * cos_angle + x0 + sin_angle * half_thickness;
+//   float dy1 = -half_thickness * sin_angle + y0 - cos_angle * half_thickness;
+//   float cx1 = (length + half_thickness) * cos_angle + sin_angle * half_thickness + x0;
+//   float cy1 = (length + half_thickness) * sin_angle - cos_angle * half_thickness + y0;
+
+//   int bounding_left   = min(min(min(ax1, bx1), cx1), dx1);
+//   int bounding_right  = ceil(max(max(max(ax1, bx1), cx1), dx1));
+//   int bounding_top    = min(min(min(ay1, by1), cy1), dy1);
+//   int bounding_bottom = ceil(max(max(max(ay1, by1), cy1), dy1));
+
+//   printf("[DATE: %s] LINE: %d [%s] INFO (%d, %d) / (%d, %d)\n",__DATE__, __LINE__, __func__, bounding_left, bounding_right, bounding_top, bounding_bottom);
+// }
 
 class ImageArtistImplement : public ImageArtist {
  public:
@@ -121,18 +147,21 @@ class ImageArtistImplement : public ImageArtist {
   }
 
   virtual void draw_prediction(int camera_index, const std::vector<Prediction>& predictions, bool flipx) override {
+    // 得到检测结果
     auto points = transformation_predictions(this->param_.viewport_nx4x4.data() + camera_index * 4, predictions);
-    size_t num = points.size();
+    size_t num = points.size();                                                                              // 目标的总个数
+    printf("%ld\n", num);  // --> 
     for (size_t i = 0; i < num; ++i) {
       auto& item = points[i];
-      auto& corners = std::get<0>(item);
-      auto label = std::get<1>(item);
-      auto score = std::get<2>(item);
+      auto& corners = std::get<0>(item);                                                                     // 目标框的八个点
+      // printf("[DATE: %s] LINE: %d [%s] INFO %ld\n",__DATE__, __LINE__, __func__, corners.size());
+      auto label = std::get<1>(item);                                                                        // 类别
+      auto score = std::get<2>(item);                                                                        // 得分
       const int idx_of_line[][2] = {
-          {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6}, {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},
+          {0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6}, {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7},    // 画线的索引
       };
 
-      NameAndColor* name_color = &default_name_color_;
+      NameAndColor* name_color = &default_name_color_;                                                       // 颜色
       if (label >= 0 && label < static_cast<int>(param_.classes.size())) {
         name_color = &param_.classes[label];
       }
@@ -140,6 +169,7 @@ class ImageArtistImplement : public ImageArtist {
       float size = std::sqrt(std::pow(corners[6].x - corners[0].x, 2) + std::pow(corners[6].y - corners[0].y, 2));
       float minx = param_.image_width;
       float miny = param_.image_height;
+      // printf("%ld\n", sizeof(idx_of_line) / sizeof(idx_of_line[0]));  // --> 12
       for (size_t ioff = 0; ioff < sizeof(idx_of_line) / sizeof(idx_of_line[0]); ++ioff) {
         auto p0 = corners[idx_of_line[ioff][0]];
         auto p1 = corners[idx_of_line[ioff][1]];
@@ -149,11 +179,16 @@ class ImageArtistImplement : public ImageArtist {
         }
         minx = std::min(minx, std::min(p0.x, p1.x));
         miny = std::min(miny, std::min(p0.y, p1.y));
+        // printf("=========================%ld\n", ioff);
+        // printf("[DATE: %s] LINE: %d [%s] INFO (%f, %f) / (%f, %f)\n",__DATE__, __LINE__, __func__, p0.x, p0.y, p1.x, p1.y);
+        // 可视化检测框
         cuosd_draw_line(cuosd_, p0.x, p0.y, p1.x, p1.y, 5, {name_color->r, name_color->g, name_color->b, 255});
+        // process_point(p0.x, p0.y, p1.x, p1.y, 5);
       }
 
       size = std::max(size * 0.06f, 8.0f);
       auto title = nv::format("%s %.2f", name_color->name.c_str(), score);
+      // 可视化类别和分数
       cuosd_draw_text(cuosd_, title.c_str(), size, UseFont, minx, miny, {name_color->r, name_color->g, name_color->b, 255},
                       {255, 255, 255, 200});
     }
@@ -182,6 +217,15 @@ std::shared_ptr<ImageArtist> create_image_artist(const ImageArtistParameter& par
 typedef struct {
   half val[5];
 } half5;
+
+// struct point4{
+//   float ax1, ay1, bx1, by1, cx1, cy1, dx1, dy1;
+//   float ax2, ay2, bx2, by2, cx2, cy2, dx2, dy2;
+//   int bounding_left   = 0;
+//   int bounding_top    = 0;
+//   int bounding_right  = 0;
+//   int bounding_bottom = 0;
+// };
 
 template <typename _T>
 static __host__ __device__ _T limit(_T value, _T amin, _T amax) {
@@ -302,13 +346,25 @@ class BEVArtistImplement : public BEVArtist {
                      {0, 0, 0, 1},
                      {0, 0, 0, 1}};
 
+    // for (size_t i = 0; i < lidar2image.size(); ++i) {
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, lidar2image[i].x);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, lidar2image[i].y);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, lidar2image[i].z);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, lidar2image[i].w);
+    // }
     transform_matrix_.resize(4);
     memset(&transform_matrix_[0], 0, sizeof(nvtype::Float4) * transform_matrix_.size());
 
     auto rotation_x = rodrigues_rotation(param.rotate_x / 180.0f * 3.141592653f, {1, 0, 0});
-    auto rotation_z = rodrigues_rotation(10.0f / 180.0f * 3.141592653f, {0, 0, 1});
+    auto rotation_z = rodrigues_rotation(0.0f / 180.0f * 3.141592653f, {0, 0, 1});
     transform_matrix_ = matmul(lidar2image, matmul(rotation_x, rotation_z));
-
+    // printf("[DATE: %s] LINE: %d [%s] INFO %ld\n",__DATE__, __LINE__, __func__, transform_matrix_.size());
+    // for (size_t i = 0; i < transform_matrix_.size(); ++i) {
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, transform_matrix_[i].x);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, transform_matrix_[i].y);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, transform_matrix_[i].z);
+    //   printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, transform_matrix_[i].w);
+    // }
     checkRuntime(cudaMalloc(&transform_matrix_device_, sizeof(nvtype::Float4) * transform_matrix_.size()));
     checkRuntime(cudaMemcpy(transform_matrix_device_, transform_matrix_.data(), sizeof(nvtype::Float4) * transform_matrix_.size(),
                             cudaMemcpyHostToDevice));
@@ -379,6 +435,10 @@ class BEVArtistImplement : public BEVArtist {
         auto& p1 = corners[idx_of_line[ioff][1]];
         minx = std::min(minx, std::min(p0.x, p1.x));
         miny = std::min(miny, std::min(p0.y, p1.y));
+        // printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, p0.x);
+        // printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, p0.y);
+        // printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, p1.x);
+        // printf("[DATE: %s] LINE: %d [%s] INFO %f\n",__DATE__, __LINE__, __func__, p1.y);
         cuosd_draw_line(cuosd_, p0.x, p0.y, p1.x, p1.y, 5, {name_color->r, name_color->g, name_color->b, 255});
       }
 
